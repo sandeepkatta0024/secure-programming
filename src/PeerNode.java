@@ -115,7 +115,7 @@ public class PeerNode {
                 System.currentTimeMillis(), lamport, 10, enc, sig);
         routingManager.routeMessage(m);
     }
-
+//show peers
     public void showPeers() {
         System.out.println("=== Online Peers ===");
         onlinePeers.forEach(System.out::println);
