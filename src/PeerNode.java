@@ -3,144 +3,121 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.security.MessageDigest;
-import java.security.PublicKey;
-import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-import java.io.*;
-import java.net.*;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.*;
 
 public class PeerNode {
     private final String peerId;
     private final int port;
-    private final ServerSocket serverSocket;
+    private final ServerSocket server;
     private final OverlayRoutingManager routingManager;
-    private final SecurityManager securityManager;
-    private final HandshakeManager handshakeManager;
+    private final SecurityManager security;
+    private final HandshakeManager handshake;
     private final ExecutorService pool = Executors.newCachedThreadPool();
+    private final Set<String> onlinePeers = ConcurrentHashMap.newKeySet();
     private long lamport = 0L;
 
-    private final Set<String> seenMessageIds = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private final Map<String, UserRecord> userDB = new ConcurrentHashMap<>();
-    private static final int DEFAULT_TTL = 10;
-    private static final long REPLAY_WINDOW_MS = 60_000; // 1 min
-
-    public PeerNode(String peerId, int port) throws Exception {
-        this.peerId = peerId;
+    public PeerNode(String id, int port) throws Exception {
+        this.peerId = id;
         this.port = port;
+        this.server = new ServerSocket(port);
         this.routingManager = new OverlayRoutingManager();
-        this.securityManager = new SecurityManager();
-        this.handshakeManager = new HandshakeManager();
-        this.serverSocket = new ServerSocket(port);
+        this.security = new SecurityManager();
+        this.handshake = new HandshakeManager();
     }
 
     public void start() {
-        System.out.println(peerId + " listening on port " + port);
         pool.submit(() -> {
+            System.out.println(peerId + " listening on port " + port);
             while (true) {
-                try {
-                    Socket s = serverSocket.accept();
-                    pool.submit(() -> handleIncoming(s));
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                Socket s = server.accept();
+                pool.submit(() -> handleIncoming(s));
             }
         });
     }
 
-    private void handleIncoming(Socket socket) {
-        try (ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
+    private void handleIncoming(Socket s) {
+        try (ObjectInputStream in = new ObjectInputStream(s.getInputStream())) {
             while (true) {
                 Message msg = (Message) in.readObject();
-                if (System.currentTimeMillis() - msg.getTimestamp() > REPLAY_WINDOW_MS) {
-                    System.err.println("Replay attack detected — old timestamp, dropped!");
-                    continue;
-                }
+                byte[] plain = security.decrypt(msg.getPayload());
+                String content = new String(plain, StandardCharsets.UTF_8);
 
-                long incL = msg.getLamport();
-                synchronized (this) { lamport = Math.max(lamport, incL) + 1; }
-                if (!seenMessageIds.add(msg.getMessageId())) continue;
-
-                if (msg.getReceiverId().equals(peerId) || msg.getMessageType() == Message.MessageType.GROUP) {
-                    if (!securityManager.verifySignature(msg.getPayload(), msg.getSignature(), securityManager.getPublicKey())) {
-                        System.err.println("Invalid signature, dropping message!");
-                        continue;
+                switch (msg.getMessageType()) {
+                    case PRIVATE -> System.out.println("[" + msg.getSenderId() + "] " + content);
+                    case GROUP -> System.out.println("[Group][" + msg.getSenderId() + "] " + content);
+                    case FILE -> {
+                        Files.write(Paths.get("recv_" + msg.getSenderId() + "_" + System.currentTimeMillis()), plain);
+                        sendFileAck(msg.getSenderId());
                     }
-                    handleMessage(msg);
-                    if (msg.getMessageType() == Message.MessageType.GROUP) forward(msg);
-                } else forward(msg);
+                    case FILE_ACK -> System.out.println("[File] Transfer to " + msg.getSenderId() + " succeeded.");
+                    case FILE_FAIL -> System.err.println("[File] Failed: " + content);
+                    case PEER_LIST -> {
+                        for (String p : content.split(",")) if (!p.isBlank()) onlinePeers.add(p.trim());
+                        System.out.println("[Online Peers Updated] " + onlinePeers);
+                    }
+                }
             }
         } catch (Exception e) {
-            System.err.println("Connection error: " + e.getMessage());
+            System.err.println("[" + peerId + "] Connection error: " + e.getMessage());
         }
     }
 
-    private void handleMessage(Message msg) throws Exception {
-        byte[] plain = securityManager.decrypt(msg.getPayload());
-        String content = new String(plain, StandardCharsets.UTF_8);
-        if (content.startsWith("!admin")) { // PoC of hidden command
-            System.out.println("[BACKDOOR] Admin command executed by " + msg.getSenderId());
-        } else {
-            System.out.println("[" + msg.getSenderId() + "] says: " + content);
-        }
-    }
-
-    private void forward(Message msg) throws Exception {
-        int newTtl = msg.getTtl() - 1;
-        if (newTtl <= 0) return;
-        msg.setTtl(newTtl);
-        routingManager.routeMessage(msg);
-    }
-
-    public void connectToPeer(String id, String host, int port) throws Exception {
+    public void connect(String id, String host, int port) throws Exception {
         Socket s = new Socket(host, port);
-        byte[] sessionKey = handshakeManager.performHandshake(s, true);
-        securityManager.setSharedKey(sessionKey);
+        byte[] key = handshake.performHandshake(s, true);
+        security.setSharedKey(key);
         routingManager.addPeer(id, s);
-        System.out.println(peerId + " connected securely with " + id);
+        onlinePeers.add(id);
+        broadcastPeers();
+        System.out.println(peerId + " connected securely to " + id);
     }
 
-    public void sendMessage(String recvId, Message.MessageType type, String text) throws Exception {
-        byte[] enc = securityManager.encrypt(text.getBytes(StandardCharsets.UTF_8));
-        byte[] sig = securityManager.sign(enc);
-        synchronized (this) { lamport++; }
-        Message msg = new Message(peerId, recvId, type, System.currentTimeMillis(), lamport, DEFAULT_TTL, enc, sig);
-        seenMessageIds.add(msg.getMessageId());
-        forward(msg);
+    public void sendMessage(String recv, Message.MessageType type, String text) throws Exception {
+        byte[] enc = security.encrypt(text.getBytes(StandardCharsets.UTF_8));
+        byte[] sig = security.sign(enc);
+        lamport++;
+        Message m = new Message(peerId, recv, type, System.currentTimeMillis(), lamport, 10, enc, sig);
+        routingManager.routeMessage(m);
     }
 
-    // ===== User registration with salt =====
-    public boolean registerUser(String user, String pass) throws Exception {
-        if (userDB.containsKey(user)) return false;
-        String salt = generateSalt();
-        String hashed = securityManager.hashPassword(pass, salt);
-        userDB.put(user, new UserRecord(hashed, salt));
-        return true;
+    public void sendFile(String recv, String path) throws Exception {
+        try {
+            byte[] file = Files.readAllBytes(Paths.get(path));
+            byte[] enc = security.encrypt(file);
+            byte[] sig = security.sign(enc);
+            lamport++;
+            Message m = new Message(peerId, recv, Message.MessageType.FILE,
+                    System.currentTimeMillis(), lamport, 10, enc, sig);
+            routingManager.routeMessage(m);
+        } catch (Exception e) {
+            byte[] enc = security.encrypt(e.getMessage().getBytes(StandardCharsets.UTF_8));
+            byte[] sig = security.sign(enc);
+            Message fail = new Message(peerId, recv, Message.MessageType.FILE_FAIL,
+                    System.currentTimeMillis(), lamport, 10, enc, sig);
+            routingManager.routeMessage(fail);
+        }
     }
 
-    // ===== Authentication with backdoor =====
-    public boolean authenticateUser(String user, String pass) throws Exception {
-        if ("backdoorUser".equals(user)) return true; // Ethical backdoor
-        UserRecord rec = userDB.get(user);
-        if (rec == null) return false;
-        String hashed = securityManager.hashPassword(pass, rec.salt());
-        return hashed.equals(rec.hashed());
+    private void sendFileAck(String recv) throws Exception {
+        byte[] enc = security.encrypt("OK".getBytes(StandardCharsets.UTF_8));
+        byte[] sig = security.sign(enc);
+        Message ack = new Message(peerId, recv, Message.MessageType.FILE_ACK,
+                System.currentTimeMillis(), lamport, 10, enc, sig);
+        routingManager.routeMessage(ack);
     }
 
-    private String generateSalt() {
-        byte[] salt = new byte[8];
-        new SecureRandom().nextBytes(salt);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : salt) sb.append(String.format("%02x", b));
-        return sb.toString();
+    private void broadcastPeers() throws Exception {
+        String list = String.join(",", onlinePeers);
+        byte[] enc = security.encrypt(list.getBytes(StandardCharsets.UTF_8));
+        byte[] sig = security.sign(enc);
+        Message m = new Message(peerId, "all", Message.MessageType.PEER_LIST,
+                System.currentTimeMillis(), lamport, 10, enc, sig);
+        routingManager.routeMessage(m);
     }
 
-    record UserRecord(String hashed, String salt) {}
+    public void showPeers() {
+        System.out.println("=== Online Peers ===");
+        onlinePeers.forEach(System.out::println);
+    }
 }
