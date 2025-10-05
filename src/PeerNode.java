@@ -37,29 +37,43 @@ public class PeerNode {
     }
 
     private void handleIncoming(Socket s) {
-        try (ObjectInputStream in = new ObjectInputStream(s.getInputStream())) {
+        try {
+            // Perform handshake (server side)
+            byte[] key = handshake.performHandshake(s, false);
+            security.setSharedKey(key);
+            String generatedId = "Peer_" + s.getPort();
+            routingManager.addPeer(generatedId, s);
+            onlinePeers.add(generatedId);
+            System.out.println("[Handshake] Session key established with " + generatedId);
+
+            ObjectInputStream in = new ObjectInputStream(s.getInputStream());
             while (true) {
                 Message msg = (Message) in.readObject();
-                byte[] plain = security.decrypt(msg.getPayload());
-                String content = new String(plain, StandardCharsets.UTF_8);
-
-                switch (msg.getMessageType()) {
-                    case PRIVATE -> System.out.println("[" + msg.getSenderId() + "] " + content);
-                    case GROUP -> System.out.println("[Group][" + msg.getSenderId() + "] " + content);
-                    case FILE -> {
-                        Files.write(Paths.get("recv_" + msg.getSenderId() + "_" + System.currentTimeMillis()), plain);
-                        sendFileAck(msg.getSenderId());
-                    }
-                    case FILE_ACK -> System.out.println("[File] Transfer to " + msg.getSenderId() + " succeeded.");
-                    case FILE_FAIL -> System.err.println("[File] Failed: " + content);
-                    case PEER_LIST -> {
-                        for (String p : content.split(",")) if (!p.isBlank()) onlinePeers.add(p.trim());
-                        System.out.println("[Online Peers Updated] " + onlinePeers);
-                    }
-                }
+                processMessage(msg);
             }
         } catch (Exception e) {
             System.err.println("[" + peerId + "] Connection error: " + e.getMessage());
+        }
+    }
+
+    private void processMessage(Message msg) throws Exception {
+        byte[] plain = security.decrypt(msg.getPayload());
+        String content = new String(plain, StandardCharsets.UTF_8);
+
+        switch (msg.getMessageType()) {
+            case PRIVATE -> System.out.println("[" + msg.getSenderId() + "] " + content);
+            case GROUP -> System.out.println("[Group][" + msg.getSenderId() + "] " + content);
+            case FILE -> {
+                Files.write(Paths.get("recv_" + msg.getSenderId() + "_" + System.currentTimeMillis()), plain);
+                sendFileAck(msg.getSenderId());
+            }
+            case FILE_ACK -> System.out.println("[File] Transfer to " + msg.getSenderId() + " succeeded.");
+            case FILE_FAIL -> System.err.println("[File] Failed: " + content);
+            case PEER_LIST -> {
+                for (String p : content.split(",")) if (!p.isBlank()) onlinePeers.add(p.trim());
+                System.out.println("[Online Peers Updated] " + onlinePeers);
+            }
+            default -> {}
         }
     }
 
@@ -69,8 +83,7 @@ public class PeerNode {
         security.setSharedKey(key);
         routingManager.addPeer(id, s);
         onlinePeers.add(id);
-        broadcastPeers();
-        System.out.println(peerId + " connected securely to " + id);
+        System.out.println("[Handshake] " + peerId + " connected securely to " + id);
     }
 
     public void sendMessage(String recv, Message.MessageType type, String text) throws Exception {
@@ -107,15 +120,6 @@ public class PeerNode {
         routingManager.routeMessage(ack);
     }
 
-    private void broadcastPeers() throws Exception {
-        String list = String.join(",", onlinePeers);
-        byte[] enc = security.encrypt(list.getBytes(StandardCharsets.UTF_8));
-        byte[] sig = security.sign(enc);
-        Message m = new Message(peerId, "all", Message.MessageType.PEER_LIST,
-                System.currentTimeMillis(), lamport, 10, enc, sig);
-        routingManager.routeMessage(m);
-    }
-//show peers
     public void showPeers() {
         System.out.println("=== Online Peers ===");
         onlinePeers.forEach(System.out::println);

@@ -5,14 +5,17 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class OverlayRoutingManager {
     private final Map<String, Socket> routingTable = new ConcurrentHashMap<>();
+    private final Map<String, ObjectOutputStream> streamTable = new ConcurrentHashMap<>();
 
-    public void addPeer(String id, Socket socket) {
+    public void addPeer(String id, Socket socket) throws Exception {
         routingTable.put(id, socket);
+        streamTable.put(id, new ObjectOutputStream(socket.getOutputStream()));
         System.out.println("[Routing] Added peer " + id);
     }
 
     public void removePeer(String id) {
         routingTable.remove(id);
+        streamTable.remove(id);
         System.out.println("[Routing] Removed peer " + id);
     }
 
@@ -23,17 +26,27 @@ public class OverlayRoutingManager {
     public void routeMessage(Message msg) throws Exception {
         if (msg.getMessageType() == Message.MessageType.GROUP ||
                 "all".equalsIgnoreCase(msg.getReceiverId())) {
-            for (Socket s : routingTable.values()) sendMessage(s, msg);
+            for (ObjectOutputStream out : streamTable.values()) {
+                synchronized (out) {
+                    out.writeObject(msg);
+                    out.flush();
+                }
+            }
         } else {
-            Socket dest = routingTable.get(msg.getReceiverId());
-            if (dest != null && !dest.isClosed()) sendMessage(dest, msg);
-            else System.err.println("[Routing] No route to " + msg.getReceiverId());
+            ObjectOutputStream out = streamTable.get(msg.getReceiverId());
+            if (out != null) {
+                synchronized (out) {
+                    out.writeObject(msg);
+                    out.flush();
+                }
+            } else {
+                System.err.println("[Routing] No route to " + msg.getReceiverId());
+            }
         }
     }
 
-    private void sendMessage(Socket s, Message msg) throws Exception {
-        ObjectOutputStream out = new ObjectOutputStream(s.getOutputStream());
-        out.writeObject(msg);
-        out.flush();
+    public void printPeers() {
+        System.out.println("=== Connected Peers ===");
+        routingTable.keySet().forEach(System.out::println);
     }
 }

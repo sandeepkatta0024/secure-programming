@@ -21,9 +21,7 @@ public class HandshakeManager {
         this.keyPair = gen.generateKeyPair();
     }
 
-    public PublicKey getPublicKey() {
-        return keyPair.getPublic();
-    }
+    public PublicKey getPublicKey() { return keyPair.getPublic(); }
 
     public byte[] performHandshake(Socket socket, boolean initiator) throws Exception {
         ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
