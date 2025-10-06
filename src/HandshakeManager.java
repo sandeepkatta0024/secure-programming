@@ -7,11 +7,7 @@ import java.net.Socket;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PublicKey;
-import java.util.Base64;
 
-/**
- * Handles RSA key exchange and AES session setup.
- */
 public class HandshakeManager {
     private final KeyPair keyPair;
 
@@ -20,8 +16,6 @@ public class HandshakeManager {
         gen.initialize(2048);
         this.keyPair = gen.generateKeyPair();
     }
-
-    public PublicKey getPublicKey() { return keyPair.getPublic(); }
 
     public byte[] performHandshake(Socket socket, boolean initiator) throws Exception {
         ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
@@ -61,9 +55,5 @@ public class HandshakeManager {
         Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
         cipher.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
         return cipher.doFinal(encrypted);
-    }
-
-    public static String encodeKey(byte[] key) {
-        return Base64.getEncoder().encodeToString(key);
     }
 }
