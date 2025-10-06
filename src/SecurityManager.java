@@ -4,7 +4,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
-import java.util.Arrays;
+import java.util.*;
 
 public class SecurityManager {
     private static final int AES_BITS = 256;
@@ -20,6 +20,8 @@ public class SecurityManager {
         kpg.initialize(2048);
         this.keyPair = kpg.generateKeyPair();
         this.aesKey = generateAesKey(AES_BITS);
+        System.out.println("[DEBUG] Generated AES key: "
+                + Base64.getEncoder().encodeToString(aesKey.getEncoded()));
     }
 
     public byte[] encrypt(byte[] plaintext) throws Exception {
@@ -33,6 +35,9 @@ public class SecurityManager {
         out.write(iv);
         out.write(ct);
         return out.toByteArray();
+    }
+    public byte[] getCurrentKey() {
+        return aesKey.getEncoded();
     }
 
     public byte[] decrypt(byte[] in) throws Exception {

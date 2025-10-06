@@ -30,7 +30,16 @@ public class Main {
                 peer.showPeers();
             } else if (cmd.equals("/exit")) {
                 System.exit(0);
-            } else {
+            }
+            else if (cmd.startsWith("/login")) {
+                String[] p = cmd.split(" ");
+                if (p.length == 3) {
+                    peer.login(p[1], p[2]);
+                } else {
+                    System.out.println("Usage: /login <username> <password>");
+                }
+            }
+            else {
                 System.out.println("Commands:\n" +
                         "/connect <peerId> <host> <port>\n" +
                         "/msg <peerId> <text>\n" +

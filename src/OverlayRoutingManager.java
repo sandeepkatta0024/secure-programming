@@ -85,7 +85,6 @@ public class OverlayRoutingManager {
         }
     }
 
-    // ==================== Debug ====================
     public void printPeers() {
         System.out.println("=== Connected Peers ===");
         routingTable.keySet().forEach(System.out::println);

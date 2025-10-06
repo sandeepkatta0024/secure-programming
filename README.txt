@@ -1,85 +1,191 @@
-# 🔐 Secure Peer-to-Peer Chat Application
+===========================================================
+        SECURE OVERLAY CHAT SYSTEM (VULNERABLE VERSION)
+===========================================================
 
-## 🧩 Overview
-This project implements a **secure peer-to-peer (P2P) communication system** in Java that supports:
+Group Name: SecureVibes
+University: The University of Adelaide
+Course: Advanced Secure Programming (2025)
+Assignment: Secure Overlay Chat System – Vulnerable Version
+Submission: Week 9 – Implementation for Peer Review
 
-- 🔒 End-to-end encrypted messaging using **RSA-AES hybrid encryption**
-- 🗂️ Secure file transfer with acknowledgement (ACK/FAIL)
-- 👥 Dynamic peer discovery and **multi-peer broadcast messaging**
-- 🧠 Lamport logical clocks for ordering events
-- 💬 Private messaging, group broadcast, and online peer listing
+-----------------------------------------------------------
+OVERVIEW
+-----------------------------------------------------------
+This is a peer-to-peer (overlay) chat system developed in Java as part of the
+Advanced Secure Programming assignment. The system allows multiple peers to
+communicate securely without a central server. It supports private messaging,
+group broadcasting, and point-to-point file transfer.
 
-Each peer runs as an independent node and can connect to others to form a secure overlay chat network.
+This submitted version *intentionally contains ethical vulnerabilities and
+backdoors* as required by the assignment. These are deliberately not disclosed
+in this README. Reviewers are expected to identify and analyse them during the
+Week 10 peer-review and hackathon exercises.
 
----
+-----------------------------------------------------------
+SYSTEM FEATURES
+-----------------------------------------------------------
+1. Secure Handshake using RSA/AES hybrid encryption.
+2. Encrypted private and group messages.
+3. File transfer between peers.
+4. Lamport timestamps for message ordering.
+5. Overlay-based routing (no central authority).
+6. Dynamic peer discovery and automatic connection.
 
-## 🏗️ Architecture
+-----------------------------------------------------------
+SYSTEM REQUIREMENTS
+-----------------------------------------------------------
+• Java SE 17 or newer
+• Works on macOS, Linux, or Windows
+• No external dependencies (uses built-in Java libraries)
 
-### Components
-| Class | Responsibility |
-|--------|----------------|
-| **Main.java** | CLI entry point; handles user commands and session control |
-| **PeerNode.java** | Core P2P logic — handles connections, encryption, message routing, and file transfer |
-| **HandshakeManager.java** | Performs RSA key exchange and AES session key setup |
-| **SecurityManager.java** | Manages AES-GCM encryption/decryption and RSA signing |
-| **OverlayRoutingManager.java** | Maintains routing table for active peers and message forwarding |
-| **Message.java** | Serializable message container with metadata (sender, type, payload, etc.) |
+-----------------------------------------------------------
+COMPILATION INSTRUCTIONS
+-----------------------------------------------------------
+1. Open terminal in the source folder containing `.java` files.
+2. Compile all files:
+       javac *.java
+3. Run the main program:
+       java Main
 
----
+-----------------------------------------------------------
+RUNNING EXAMPLES
+-----------------------------------------------------------
+Example 1 – Start first peer:
+    java Main
+    Enter peerId: A
+    Enter port: 7100
 
-## 🔐 Security Design
+Example 2 – Start second peer:
+    java Main
+    Enter peerId: B
+    Enter port: 7200
+    /connect A localhost 7100
 
-| Layer | Algorithm | Purpose |
-|--------|------------|----------|
-| **Key Exchange** | RSA (2048 bits) | Establishes a secure AES session key |
-| **Session Encryption** | AES-256-GCM | Provides confidentiality + integrity |
-| **Message Signing** | SHA-256 with RSA | Prevents tampering |
-| **Transport** | Java sockets | Peer-to-peer over TCP |
+Example 3 – Start third peer:
+    java Main
+    Enter peerId: C
+    Enter port: 7300
+    /connect B localhost 7200
 
-Each peer negotiates a **unique AES session key** with every other peer via RSA handshake.  
-All messages and files are encrypted using AES-GCM, which ensures both confidentiality and authenticity.
+-----------------------------------------------------------
+COMMANDS
+-----------------------------------------------------------
+/connect <peerId> <host> <port>   Connect to another peer.
+/msg <peerId> <message>          Send a private message.
+/broadcast <message>             Send a group message to all peers.
+/sendfile <peerId> <path>        Send a file to another peer.
+/peers                           Show currently online peers.
+/login <username> <password>     [Feature reserved for testing – do not disclose details.]
+/exit                            Quit the program.
 
----
+-----------------------------------------------------------
+DEMO WALKTHROUGH (EXAMPLE)
+-----------------------------------------------------------
 
-## ⚙️ Setup & Running
+This example demonstrates how three peers (A, B, and C) can securely connect
+to each other, exchange private and group messages, and transfer a file.
 
-### 🧾 Prerequisites
-- Java 17 or later
-- Terminal access (macOS, Linux, or Windows PowerShell)
-
-### 🧩 Compilation
-```bash
-javac *.java
-
-
-💬 Commands
-Command	Description	Example
-/connect <peerId> <host> <port>	Connects securely to another peer	/connect B localhost 7200
-/msg <peerId> <text>	Sends a private message	/msg B Hello there!
-/broadcast <text>	Sends a message to all connected peers	/broadcast Hi everyone!
-/sendfile <peerId> <path>	Sends an encrypted file to a peer	/sendfile C /Users/sandeep/Desktop/file.txt
-/peers	Lists currently online peers (excluding self)	/peers
-/exit	Exits the chat application	/exit
-
-
-
-# A
+🟩 Step 1 – Start Peer A (acts as initial listener)
+----------------------------------------------------
+$ java Main
+Enter peerId: A
+Enter port: 7100
 > A listening on port 7100
-/connect B localhost 7200
-[Handshake] A connected securely to B
-/msg B Hello B
-[File] Transfer to B succeeded.
 
-# B
+
+🟩 Step 2 – Start Peer B and connect to A
+----------------------------------------------------
+$ java Main
+Enter peerId: B
+Enter port: 7200
 > B listening on port 7200
 /connect A localhost 7100
 [Handshake] B connected securely to A
-[A] Hello B
-[Updated Online Peers] [A, B, C]
-[File] Received from A -> recv_A_1759743357369
+> [Updated Online Peers] [A, B]
 
-# C
+
+🟩 Step 3 – Start Peer C and connect to B
+----------------------------------------------------
+$ java Main
+Enter peerId: C
+Enter port: 7300
 > C listening on port 7300
 /connect B localhost 7200
 [Handshake] C connected securely to B
-/broadcast Hello everyone!
+> [Updated Online Peers] [A, B, C]
+
+
+🟩 Step 4 – Private Messaging
+----------------------------------------------------
+From B → A:
+/msg A Hello A
+Output on A’s console:
+[B] Hello A
+
+From A → C:
+/msg C Hey C
+Output on C’s console:
+[A] Hey C
+
+
+🟩 Step 5 – Group Broadcast
+----------------------------------------------------
+From any peer:
+/broadcast Hello Everyone!
+Output appears on all connected peers as:
+[Group][<sender>] Hello Everyone!
+
+
+🟩 Step 6 – File Transfer
+----------------------------------------------------
+From A → C:
+/sendfile C /Users/<username>/Desktop/sample.txt
+Output:
+[File] Transfer to C succeeded.
+On peer C:
+[File] Received from A -> recv_A_<timestamp>
+
+
+🟩 Step 7 – List Online Peers
+----------------------------------------------------
+/peers
+Output:
+=== Online Peers ===
+A
+B
+C
+
+
+🟩 Step 8 – Exit the program
+----------------------------------------------------
+/exit
+
+
+-----------------------------------------------------------
+REVIEWER INSTRUCTIONS
+-----------------------------------------------------------
+1. Compile and run using the commands above.
+2. Test interoperability by connecting multiple peers on localhost.
+3. Explore functionality through provided commands.
+4. Review the source code manually and/or with static/dynamic tools to identify
+   embedded vulnerabilities and ethical backdoors.
+5. Provide constructive feedback focusing on:
+     – secure coding practices
+     – protocol design adherence
+     – potential exploit scenarios
+
+-----------------------------------------------------------
+SUPPORT & CONTACT
+-----------------------------------------------------------
+For clarification or collaboration during peer review:
+
+    Contact: Vamsi Krishna Chirumamilla
+    Email:  a1979571@adelaide.edu.au
+
+    Contact: Sandeep Katta
+    Email:   a1990024@adelaide.edu.au
+
+    Contact: Rupesh Ashok Kumar
+    Email:   a1983942@adelaide.edu.au
+
+We welcome feedback to improve both code security and interoperability.
