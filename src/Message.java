@@ -4,7 +4,10 @@ import java.util.UUID;
 public class Message implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    public enum MessageType { PRIVATE, GROUP, FILE, FILE_ACK, FILE_FAIL, PEER_LIST }
+    public enum MessageType {
+        PRIVATE, GROUP, FILE, FILE_ACK, FILE_FAIL, PEER_LIST, HELLO
+    }
+
 
     private String senderId;
     private String receiverId;
