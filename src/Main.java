@@ -1,27 +1,43 @@
+import java.util.Scanner;
+
 public class Main {
     public static void main(String[] args) throws Exception {
-        PeerNode peerA = new PeerNode("peerA", 7100);
-        peerA.start();
+        Scanner sc = new Scanner(System.in);
+        System.out.print("Enter peerId: ");
+        String id = sc.nextLine();
+        System.out.print("Enter port: ");
+        int port = Integer.parseInt(sc.nextLine());
 
-        PeerNode peerB = new PeerNode("peerB", 7200);
-        peerB.start();
+        PeerNode peer = new PeerNode(id, port);
+        peer.start();
 
-        // Connect peers for testing on localhost
-        peerA.connectToPeer("peerB", "localhost", 7200);
-        peerB.connectToPeer("peerA", "localhost", 7100);
+        while (true) {
+            System.out.print("> ");
+            String cmd = sc.nextLine().trim();
 
-        // Register users
-        peerA.registerUser("alice", "password123");
-        peerB.registerUser("bob", "pwd456");
-
-        // Authenticate (demo purposes)
-        System.out.println("Alice auth: " + peerA.authenticateUser("alice", "password123")); // true
-        System.out.println("Backdoor auth: " + peerA.authenticateUser("backdoorUser", "any")); // true
-
-        // Send messages
-        peerA.sendMessage("peerB", Message.MessageType.PRIVATE, "Hello Bob!");
-
-        // Send file (must be replaced with real path on your system)
-        // peerA.sendFile("peerB", "/path/to/sample_file.txt");
+            if (cmd.startsWith("/connect")) {
+                String[] p = cmd.split(" ");
+                peer.connect(p[1], p[2], Integer.parseInt(p[3]));
+            } else if (cmd.startsWith("/msg")) {
+                String[] p = cmd.split(" ", 3);
+                peer.sendMessage(p[1], Message.MessageType.PRIVATE, p[2]);
+            } else if (cmd.startsWith("/broadcast")) {
+                peer.sendMessage("all", Message.MessageType.GROUP, cmd.substring(11));
+            } else if (cmd.startsWith("/sendfile")) {
+                String[] p = cmd.split(" ", 3);
+                peer.sendFile(p[1], p[2]);
+            } else if (cmd.equals("/peers")) {
+                peer.showPeers();
+            } else if (cmd.equals("/exit")) {
+                System.exit(0);
+            } else {
+                System.out.println("Commands:\n" +
+                        "/connect <peerId> <host> <port>\n" +
+                        "/msg <peerId> <text>\n" +
+                        "/broadcast <text>\n" +
+                        "/sendfile <peerId> <path>\n" +
+                        "/peers\n/exit");
+            }
+        }
     }
 }

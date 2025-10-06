@@ -10,9 +10,7 @@ import java.security.PublicKey;
 import java.util.Base64;
 
 /**
- * Handles secure RSA-based key exchange between peers.
- * Each peer sends its RSA public key, receives the other's key,
- * and encrypts a new AES session key for the other side.
+ * Handles RSA key exchange and AES session setup.
  */
 public class HandshakeManager {
     private final KeyPair keyPair;
@@ -23,37 +21,27 @@ public class HandshakeManager {
         this.keyPair = gen.generateKeyPair();
     }
 
-    public PublicKey getPublicKey() {
-        return keyPair.getPublic();
-    }
+    public PublicKey getPublicKey() { return keyPair.getPublic(); }
 
-    /** Performs a mutual handshake and sets AES key on both peers. */
     public byte[] performHandshake(Socket socket, boolean initiator) throws Exception {
         ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
         ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
         if (initiator) {
-            // Send my public key
             out.writeObject(keyPair.getPublic());
             out.flush();
-            // Receive their key
             PublicKey remoteKey = (PublicKey) in.readObject();
-            // Create AES key and encrypt for peer
             SecretKey aesKey = generateAesKey(256);
             byte[] encryptedAes = encryptAesKey(aesKey.getEncoded(), remoteKey);
             out.writeObject(encryptedAes);
             out.flush();
             return aesKey.getEncoded();
         } else {
-            // Receive their key
             PublicKey remoteKey = (PublicKey) in.readObject();
-            // Send my key
             out.writeObject(keyPair.getPublic());
             out.flush();
-            // Receive AES key encrypted to me
             byte[] encryptedAes = (byte[]) in.readObject();
-            byte[] aesKeyBytes = decryptAesKey(encryptedAes);
-            return aesKeyBytes;
+            return decryptAesKey(encryptedAes);
         }
     }
 
